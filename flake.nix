@@ -16,5 +16,11 @@
       ];
       env.RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
     };
+
+    packages."x86_64-linux".default = pkgs.rustPlatform.buildRustPackage {
+      name = "lo";
+      src = ./.;
+      cargoLock.lockFile = ./Cargo.lock;
+    };
   };
 }
