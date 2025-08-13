@@ -53,6 +53,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.99"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0674a1ddeecb70197781e945de4b3b8ffb61fa939a5597bcf48503737663100"
+
+[[package]]
 name = "clap"
 version = "4.5.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -111,9 +117,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7943c866cc5cd64cbc25b2e01621d07fa8eb2a1a23160ee81ce38704e97b8ecf"
 
 [[package]]
-name = "lesson-organizer"
+name = "lo"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
 ]
 
