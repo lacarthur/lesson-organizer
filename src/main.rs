@@ -1,4 +1,10 @@
-use std::{fmt, fs::{self, File}, io::Write, path::PathBuf, process::{Command, Stdio}};
+use std::{
+    fmt,
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+    process::{Command, Stdio},
+};
 
 use clap::{Parser, Subcommand};
 
@@ -51,7 +57,7 @@ impl Lesson {
     }
 
     fn create(&self) -> Result<(), std::io::Error> {
-        let mut file = File::create(&self.typst_path()).unwrap();
+        let mut file = File::create(self.typst_path()).unwrap();
         file.write_all(get_new_file_contents().as_bytes()).unwrap();
 
         if !self.output_folder().exists() {
@@ -59,8 +65,8 @@ impl Lesson {
         }
         Command::new("typst")
             .arg("compile")
-            .arg(&self.typst_path())
-            .arg(&self.pdf_path())
+            .arg(self.typst_path())
+            .arg(self.pdf_path())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -93,14 +99,18 @@ enum RenameError {
 impl fmt::Display for RenameError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RenameError::FileAlreadyExists(path) => write!(f, "The file {} already exists", path.display()),
-            RenameError::MissingFile(path) => write!(f, "The file {} does not exist", path.display()),
-            RenameError::Other(error) => write!(f, "IO Error when renaming file: {}", error),
+            RenameError::FileAlreadyExists(path) => {
+                write!(f, "The file {} already exists", path.display())
+            }
+            RenameError::MissingFile(path) => {
+                write!(f, "The file {} does not exist", path.display())
+            }
+            RenameError::Other(error) => write!(f, "IO Error when renaming file: {error}"),
         }
     }
 }
 
-impl std::error::Error for RenameError { }
+impl std::error::Error for RenameError {}
 
 fn rename_lesson(old_filename: String, new_filename: String) -> Result<(), RenameError> {
     let old_lesson = Lesson::new(old_filename);
@@ -130,8 +140,10 @@ enum DeleteError {
 impl fmt::Display for DeleteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DeleteError::MissingFile(path) => write!(f, "The file {} does not exist", path.display()),
-            DeleteError::Other(error) => write!(f, "IO Error when deleting file : {}", error),
+            DeleteError::MissingFile(path) => {
+                write!(f, "The file {} does not exist", path.display())
+            }
+            DeleteError::Other(error) => write!(f, "IO Error when deleting file : {error}"),
         }
     }
 }
@@ -157,7 +169,7 @@ fn open_lesson(filename: String) -> Result<(), std::io::Error> {
     }
 
     let mut pdf_reader = Command::new(PDF_READER)
-        .arg(&lesson.pdf_path())
+        .arg(lesson.pdf_path())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -165,7 +177,7 @@ fn open_lesson(filename: String) -> Result<(), std::io::Error> {
         .expect("Failed to spawn pdf reader");
 
     Command::new(EDITOR)
-        .arg(&lesson.typst_path())
+        .arg(lesson.typst_path())
         .status()
         .expect("Failed to spawn editor");
 
@@ -212,14 +224,17 @@ fn fuzzy_find_file() -> Option<String> {
 
 fn main() -> anyhow::Result<()> {
     let organizer = Organizer::parse();
-    
+
     match organizer.command {
         None => match fuzzy_find_file() {
             None => (),
             Some(filename) => open_lesson(filename)?,
         },
         Some(LoCommand::Open { filename }) => open_lesson(filename)?,
-        Some(LoCommand::Rename { old_filename, new_filename }) => rename_lesson(old_filename, new_filename)?,
+        Some(LoCommand::Rename {
+            old_filename,
+            new_filename,
+        }) => rename_lesson(old_filename, new_filename)?,
         Some(LoCommand::Remove { filename }) => remove_lesson(filename)?,
     }
     Ok(())
