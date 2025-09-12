@@ -288,7 +288,10 @@ fn main() -> anyhow::Result<()> {
     match command {
         LoCommand::Fuzz => match fuzzy_find_file() {
             None => (),
-            Some(filename) => open_lesson(Lesson::new(filename))?,
+            Some(filename) => {
+                open_lesson(Lesson::new(filename))?;
+                println!("");
+            }
         },
         LoCommand::Open { lesson } => open_lesson(lesson)?,
         LoCommand::Rename {
