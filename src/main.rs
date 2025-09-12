@@ -6,8 +6,6 @@ use std::{
     process::{Command, Stdio},
 };
 
-use clap::{Parser, Subcommand};
-
 const PDF_READER: &str = "zathura";
 const EDITOR: &str = "nvim";
 const TYPST_HEADER: &str = r#"#import "template/lib.typ": *
@@ -18,13 +16,6 @@ const TYPST_HEADER: &str = r#"#import "template/lib.typ": *
 
 #bibliography("bibliography.yml")
 "#;
-
-#[derive(Parser)]
-#[command(version, about, long_about=None)]
-struct Organizer {
-    #[command(subcommand)]
-    command: Option<LoCommand>,
-}
 
 struct Lesson {
     parent_folder: PathBuf,
@@ -75,97 +66,166 @@ impl Lesson {
     }
 }
 
-#[derive(Subcommand)]
 enum LoCommand {
     Open {
-        filename: String,
+        lesson: Lesson,
+    },
+    Create {
+        lesson: Lesson,
     },
     Rename {
-        old_filename: String,
-        new_filename: String,
+        old_lesson: Lesson,
+        new_lesson: Lesson,
     },
     Remove {
-        filename: String,
+        lesson: Lesson,
     },
+    Fuzz,
 }
 
 #[derive(Debug)]
-enum RenameError {
-    FileAlreadyExists(PathBuf),
-    MissingFile(PathBuf),
-    Other(std::io::Error),
+enum ParsingError {
+    WrongArgNumber { expected: u32, got: u32 },
+    UnknownCommand(String),
 }
 
-impl fmt::Display for RenameError {
+impl std::error::Error for ParsingError {}
+
+impl fmt::Display for ParsingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RenameError::FileAlreadyExists(path) => {
-                write!(f, "The file {} already exists", path.display())
+            ParsingError::WrongArgNumber { expected, got } => {
+                write!(
+                    f,
+                    "Wrong number of arguments for the command. Expected {expected}, got {got}"
+                )
             }
-            RenameError::MissingFile(path) => {
-                write!(f, "The file {} does not exist", path.display())
+            ParsingError::UnknownCommand(command) => {
+                write!(f, "Unknown command : {command}")
             }
-            RenameError::Other(error) => write!(f, "IO Error when renaming file: {error}"),
         }
     }
 }
 
-impl std::error::Error for RenameError {}
+fn parse_args() -> Result<LoCommand, ParsingError> {
+    let args: Vec<String> = std::env::args().collect();
 
-fn rename_lesson(old_filename: String, new_filename: String) -> Result<(), RenameError> {
-    let old_lesson = Lesson::new(old_filename);
-    let new_lesson = Lesson::new(new_filename);
-
-    if !old_lesson.typst_path().exists() {
-        return Err(RenameError::MissingFile(old_lesson.typst_path()));
+    if args.len() == 1 {
+        return Ok(LoCommand::Fuzz);
     }
 
+    match &args[1][..] {
+        "rename" | "rn" | "move" | "mv" => {
+            if args.len() != 4 {
+                return Err(ParsingError::WrongArgNumber {
+                    expected: 2,
+                    got: args.len() as u32 - 2,
+                });
+            }
+
+            Ok(LoCommand::Rename {
+                old_lesson: Lesson::new(args[2].clone()),
+                new_lesson: Lesson::new(args[3].clone()),
+            })
+        }
+        "create" | "new" | "n" => {
+            if args.len() != 3 {
+                return Err(ParsingError::WrongArgNumber {
+                    expected: 1,
+                    got: args.len() as u32 - 2,
+                });
+            }
+
+            Ok(LoCommand::Create {
+                lesson: Lesson::new(args[2].clone()),
+            })
+        }
+        "remove" | "rm" | "delete" | "d" => {
+            if args.len() != 3 {
+                return Err(ParsingError::WrongArgNumber {
+                    expected: 1,
+                    got: args.len() as u32 - 2,
+                });
+            }
+
+            Ok(LoCommand::Remove {
+                lesson: Lesson::new(args[2].clone()),
+            })
+        }
+        "open" | "o" => {
+            if args.len() != 3 {
+                return Err(ParsingError::WrongArgNumber {
+                    expected: 1,
+                    got: args.len() as u32 - 2,
+                });
+            }
+
+            Ok(LoCommand::Open {
+                lesson: Lesson::new(args[2].clone()),
+            })
+        }
+        _ => {
+            if args.len() != 2 {
+                return Err(ParsingError::WrongArgNumber {
+                    expected: 1,
+                    got: args.len() as u32 - 1,
+                });
+            }
+
+            if args[1].len() <= 3 || &args[1][args[1].len() - 4..] != ".typ" {
+                return Err(ParsingError::UnknownCommand(args[1].clone()));
+            }
+
+            Ok(LoCommand::Open {
+                lesson: Lesson::new(args[1].clone()),
+            })
+        }
+    }
+}
+
+fn rename_lesson(old_lesson: Lesson, new_lesson: Lesson) -> Result<(), std::io::Error> {
     if new_lesson.typst_path().exists() {
-        return Err(RenameError::FileAlreadyExists(new_lesson.typst_path()));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("File {} already exists", new_lesson.typst_path().display()),
+        ));
     }
 
     // if this fails midway through, how do we handle it ?
-    fs::rename(old_lesson.typst_path(), new_lesson.typst_path()).map_err(RenameError::Other)?;
-    fs::rename(old_lesson.pdf_path(), new_lesson.pdf_path()).map_err(RenameError::Other)?;
+    fs::rename(old_lesson.typst_path(), new_lesson.typst_path())?;
+    fs::rename(old_lesson.pdf_path(), new_lesson.pdf_path())?;
 
     Ok(())
 }
 
-#[derive(Debug)]
-enum DeleteError {
-    MissingFile(PathBuf),
-    Other(std::io::Error),
-}
-
-impl fmt::Display for DeleteError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DeleteError::MissingFile(path) => {
-                write!(f, "The file {} does not exist", path.display())
-            }
-            DeleteError::Other(error) => write!(f, "IO Error when deleting file : {error}"),
-        }
-    }
-}
-
-impl std::error::Error for DeleteError {}
-
-fn remove_lesson(filename: String) -> Result<(), DeleteError> {
-    let lesson = Lesson::new(filename);
-    if !lesson.typst_path().exists() {
-        return Err(DeleteError::MissingFile(lesson.typst_path()));
-    }
-
-    fs::remove_file(lesson.typst_path()).map_err(DeleteError::Other)?;
-    fs::remove_file(lesson.pdf_path()).map_err(DeleteError::Other)?;
+fn remove_lesson(lesson: Lesson) -> Result<(), std::io::Error> {
+    fs::remove_file(lesson.typst_path())?;
+    fs::remove_file(lesson.pdf_path())?;
 
     Ok(())
 }
 
-fn open_lesson(filename: String) -> Result<(), std::io::Error> {
-    let lesson = Lesson::new(filename);
+fn create_lesson(lesson: Lesson) -> Result<(), std::io::Error> {
+    if lesson.typst_path().exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!(
+                "Lesson file already exists: {}",
+                lesson.typst_path().display()
+            ),
+        ));
+    }
+
+    lesson.create()?;
+    open_lesson(lesson)
+}
+
+fn open_lesson(lesson: Lesson) -> Result<(), std::io::Error> {
     if !lesson.typst_path().exists() {
-        lesson.create()?;
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Missing file: {}", lesson.typst_path().display()),
+        ));
     }
 
     let mut pdf_reader = Command::new(PDF_READER)
@@ -223,19 +283,20 @@ fn fuzzy_find_file() -> Option<String> {
 }
 
 fn main() -> anyhow::Result<()> {
-    let organizer = Organizer::parse();
+    let command = parse_args()?;
 
-    match organizer.command {
-        None => match fuzzy_find_file() {
+    match command {
+        LoCommand::Fuzz => match fuzzy_find_file() {
             None => (),
-            Some(filename) => open_lesson(filename)?,
+            Some(filename) => open_lesson(Lesson::new(filename))?,
         },
-        Some(LoCommand::Open { filename }) => open_lesson(filename)?,
-        Some(LoCommand::Rename {
-            old_filename,
-            new_filename,
-        }) => rename_lesson(old_filename, new_filename)?,
-        Some(LoCommand::Remove { filename }) => remove_lesson(filename)?,
+        LoCommand::Open { lesson } => open_lesson(lesson)?,
+        LoCommand::Rename {
+            old_lesson,
+            new_lesson,
+        } => rename_lesson(old_lesson, new_lesson)?,
+        LoCommand::Remove { lesson } => remove_lesson(lesson)?,
+        LoCommand::Create { lesson } => create_lesson(lesson)?,
     }
     Ok(())
 }
