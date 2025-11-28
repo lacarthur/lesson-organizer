@@ -228,6 +228,16 @@ fn open_lesson(lesson: Lesson) -> Result<(), std::io::Error> {
         ));
     }
 
+    // we recompile just in case
+    Command::new("typst")
+        .arg("compile")
+        .arg(lesson.typst_path())
+        .arg(lesson.pdf_path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+
     let mut pdf_reader = Command::new(PDF_READER)
         .arg(lesson.pdf_path())
         .stdin(Stdio::null())
